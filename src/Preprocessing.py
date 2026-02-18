@@ -1,0 +1,120 @@
+import pandas as pd
+import numpy as np
+import src.path_finder as pathfinder
+from src.Ingestion import DataIngestion
+from sklearn.model_selection import train_test_split
+import os
+##### List of usable columns from Jenny's EDA
+columns_to_use = [
+# --- Agent & Office Info ---
+'BuyerAgentAOR', 'BuyerAgentFirstName', 'BuyerAgentLastName', 'BuyerAgentMlsId',
+'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
+
+# --- Location & Address ---
+'City', 'CountyOrParish', 'HighSchoolDistrict', 'Latitude', 'Longitude',
+'MLSAreaMajor', 'PostalCode', 'StateOrProvince', 'StreetNumberNumeric',
+'UnparsedAddress',
+
+# --- Property Specs ---
+'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
+'Flooring', 'GarageSpaces', 'Levels', 'LivingArea', 'MainLevelBedrooms',
+'NewConstructionYN', 'ParkingTotal', 'PoolPrivateYN', 'PropertySubType',
+'PropertyType', 'Stories', 'ViewYN', 'YearBuilt',
+
+# --- Lot Information ---
+'LotSizeAcres', 'LotSizeArea', 'LotSizeSquareFeet',
+
+# --- Transaction & Status ---
+'AssociationFee', 'CloseDate', 'ClosePrice', 'ContractStatusChangeDate',
+'DaysOnMarket', 'MlsStatus', 'PurchaseContractDate',
+]
+#######
+
+# Get data withing restriction.
+# Params: columns = required columns
+def get_unprocessed_data(accessor: DataIngestion, columns=None, aggregations = None):
+    if columns is None:
+        columns = columns_to_use
+    if aggregations is not None:
+        columns = columns.append(aggregations)
+
+    ######### Optimized query from Johnny's EDA
+    df = accessor.query(
+        f"""
+        SELECT {', '.join(columns)}
+        FROM Property
+        WHERE PropertyType = 'Residential'
+          AND PropertySubType = 'SingleFamilyResidence'
+          AND ClosePrice > 0
+          AND LivingArea > 0
+          AND Latitude IS NOT NULL
+          AND Longitude IS NOT NULL
+          AND Latitude BETWEEN 32 AND 43
+          AND Longitude BETWEEN -125 AND -113
+        """
+    )
+    return df
+
+def cyclical_encoding(x):
+    return np.sin(2 * np.pi * (x.month/12.0))
+
+def zipcode_parse(org: str):
+    if org is not None:
+        if len(org) >= 5:
+            return org[:5]
+        else:
+            return 0
+    else:
+        return 0
+
+def trimming_quantiles(X, y, quantile=0.05):
+    if not (0 <= quantile < 0.5):
+        raise ValueError("quantile must be in [0, 0.5)")
+
+    lo, hi = y.quantile([quantile, 1 - quantile])
+    mask = (y >= lo) & (y <= hi)
+    return X.loc[mask], y.loc[mask]
+
+
+def train_test_split_with_trimming(df, y, test_size=0.2, random_state=42):
+    X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=test_size, random_state=random_state)
+    X_train, y_train = trimming_quantiles(X_train, y_train)
+    X_test, y_test = trimming_quantiles(X_test, y_test)
+    return X_train, X_test, y_train, y_test
+
+def store_data_in_parquet(df: pd.DataFrame, path=None):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    df.to_parquet(os.path.join(path, '/clean_data.parquet'))
+
+def store_data_in_csv(df: pd.DataFrame, path=None):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    df.to_csv(os.path.join(path, 'clean_data.csv'))
+
+if __name__ == "__main__":
+    accessor = DataIngestion(pathfinder.CSV_DIR)
+
+    ## Read required data
+    df = get_unprocessed_data(accessor= accessor)
+    # print(df.columns)
+    df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
+
+    df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
+    df.drop('CloseDate', axis=1, inplace=True)
+
+    df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
+
+
+    ## Output for training
+    # store_data_in_parquet(df, path=pathfinder.ARTIFACTS_DIR)
+    store_data_in_csv(df, path=pathfinder.OUTPUT_DIR)
+
+
+
+
+
+
+
