@@ -12,3 +12,20 @@ Members:
 - Huiyu Yie
 
 Directories:
+```
+.
+├── src (source code)
+│   ├── __init__.py
+    ├── Modeling.py
+    ├── Ingestion.py
+    ├── path_finder.py
+│   └── Preprocessing.py
+├── Data
+    ├── Artifacts (store training data)
+    └── Warehouse (store DuckDB database object)
+├── Notebooks
+    └── EDA.ipynb
+├── Output
+└── IDX_data (put CSVs in here)
+...
+```
