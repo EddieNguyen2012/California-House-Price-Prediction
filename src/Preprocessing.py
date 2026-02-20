@@ -94,6 +94,17 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 
     df.to_csv(os.path.join(path, 'clean_data.csv'))
 
+####### Jenny (median imputation)
+def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # numeric columns
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
+
+    return df
+#######
+
 if __name__ == "__main__":
     accessor = DataIngestion(pathfinder.CSV_DIR)
 
@@ -104,6 +115,8 @@ if __name__ == "__main__":
 
     df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
     df.drop('CloseDate', axis=1, inplace=True)
+
+    df = impute_missing_values(df)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
 
