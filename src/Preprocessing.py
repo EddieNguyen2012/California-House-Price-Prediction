@@ -94,6 +94,67 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 
     df.to_csv(os.path.join(path, 'clean_data.csv'))
 
+
+#### Huiyu: Helper function for imputation
+def build_imputer(strategy: str = "median"):
+    """
+    options for strategy:
+    - "median"
+    - "mean"
+    - "most_frequent"
+    - "constant"
+    """
+    from sklearn.impute import SimpleImputer
+    return SimpleImputer(strategy=strategy)
+
+
+#### Huiyu: Helper function to get categorical feature indices by column names
+def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
+    return [X.columns.get_loc(c) for c in cat_cols if c in X.columns]
+
+
+### Huiyu: ColumnTransformer preprocessor
+def build_sklearn_preprocessor(
+    X: pd.DataFrame,
+    categorical_cols: list[str],
+    numeric_cols = None,
+    scale_numeric: bool = True,
+):
+    """
+    This is a preprocessing ColumnTransformer:
+    - numeric: median impute (+ optional scaling)
+    - categorical: most_frequent impute + one-hot
+    """
+    from sklearn.compose import ColumnTransformer
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+    if numeric_cols is None:
+        numeric_cols = [c for c in X.columns if c not in categorical_cols]
+
+    num_imputer = build_imputer("median")
+    cat_imputer = build_imputer("most_frequent")
+
+    num_steps = [("imputer", num_imputer)]
+    if scale_numeric:
+        num_steps.append(("scaler", StandardScaler()))
+    num_pipe = Pipeline(steps=num_steps)
+
+    cat_pipe = Pipeline(steps=[
+        ("imputer", cat_imputer),
+        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+    ])
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", num_pipe, numeric_cols),
+            ("cat", cat_pipe, categorical_cols),
+        ],
+        remainder="drop",
+        verbose_feature_names_out=False,
+    )
+    return preprocessor
+
 if __name__ == "__main__":
     accessor = DataIngestion(pathfinder.CSV_DIR)
 
