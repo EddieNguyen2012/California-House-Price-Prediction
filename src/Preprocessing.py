@@ -30,6 +30,9 @@ columns_to_use = [
 ]
 #######
 
+# Median imputation -> columns including "LivingArea", "LotSizeAcres", "LotSizeArea", "LotSizeSquareFeet", "BathroomsTotalInteger", "Stories", "GarageSpaces", "Latitude", "Longitude".
+# Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns. And for latitude and longitude, there are only 5 missing values in each variable, so imputing median would not have a significant effect on the overall model performance.
+
 # Get data withing restriction.
 # Params: columns = required columns
 def get_unprocessed_data(accessor: DataIngestion, columns=None, aggregations = None):
@@ -95,13 +98,26 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
     df.to_csv(os.path.join(path, 'clean_data.csv'))
 
 ####### Jenny (median imputation)
-def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+def compute_medians(df: pd.DataFrame) -> pd.Series:
+    cols_impute = [
+        "LivingArea",
+        "LotSizeAcres",
+        "LotSizeArea",
+        "LotSizeSquareFeet",
+        "BathroomsTotalInteger",
+        "Stories",
+        "GarageSpaces",
+        "Latitude",
+        "Longitude"
+    ]
+    
+    cols_impute = [col for col in cols_impute if col in df.columns]
+    
+    return df[cols_impute].median()
+
+def impute_with_medians(df: pd.DataFrame, medians: pd.Series) -> pd.DataFrame:
     df = df.copy()
-
-    # numeric columns
-    num_cols = df.select_dtypes(include=[np.number]).columns
-    df[num_cols] = df[num_cols].fillna(df[num_cols].median())
-
+    df[medians.index] = df[medians.index].fillna(medians)
     return df
 #######
 
@@ -116,7 +132,7 @@ if __name__ == "__main__":
     df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
     df.drop('CloseDate', axis=1, inplace=True)
 
-    df = impute_missing_values(df)
+    df = impute_with_medians(df)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
 
