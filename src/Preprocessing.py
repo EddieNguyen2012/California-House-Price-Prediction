@@ -7,8 +7,9 @@ import os
 ##### List of usable columns from Jenny's EDA
 columns_to_use = [
 # --- Agent & Office Info ---
-'BuyerAgentAOR', 'BuyerAgentFirstName', 'BuyerAgentLastName', 'BuyerAgentMlsId',
-'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
+"""
+I dropped all these columns.
+"""
 
 # --- Location & Address ---
 'City', 'CountyOrParish', 'HighSchoolDistrict', 'Latitude', 'Longitude',
@@ -25,13 +26,12 @@ columns_to_use = [
 'LotSizeAcres', 'LotSizeArea', 'LotSizeSquareFeet',
 
 # --- Transaction & Status ---
-'AssociationFee', 'CloseDate', 'ClosePrice', 'ContractStatusChangeDate',
-'DaysOnMarket', 'MlsStatus', 'PurchaseContractDate',
+'AssociationFee', 'CloseDate', 'ClosePrice', 'DaysOnMarket', 'MlsStatus',
 ]
 #######
 
-# Median imputation -> columns including "LivingArea", "LotSizeAcres", "LotSizeArea", "LotSizeSquareFeet", "BathroomsTotalInteger", "Stories", "GarageSpaces", "Latitude", "Longitude".
-# Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns. And for latitude and longitude, there are only 5 missing values in each variable, so imputing median would not have a significant effect on the overall model performance.
+# Median imputation -> columns including LivingArea, LotSizeAcres, LotSizeArea, LotSizeSquareFeet, BathroomsTotalInteger, Stories, and GarageSpaces.
+# Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns.
 
 # Get data withing restriction.
 # Params: columns = required columns
@@ -107,8 +107,6 @@ def compute_medians(df: pd.DataFrame) -> pd.Series:
         "BathroomsTotalInteger",
         "Stories",
         "GarageSpaces",
-        "Latitude",
-        "Longitude"
     ]
     
     cols_impute = [col for col in cols_impute if col in df.columns]
@@ -132,7 +130,8 @@ if __name__ == "__main__":
     df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
     df.drop('CloseDate', axis=1, inplace=True)
 
-    df = impute_with_medians(df)
+    medians = compute_medians(df)
+    df = impute_with_medians(df, medians)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
 
