@@ -32,6 +32,36 @@ columns_to_use = [
 # Median imputation -> columns including LivingArea, LotSizeAcres, LotSizeArea, LotSizeSquareFeet, BathroomsTotalInteger, Stories, and GarageSpaces.
 # Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns.
 
+
+#### Huiyu's Feature Handling Plan
+
+# Zip code parsing -> columns including PostalCode.
+# Reasons: PostalCode is a geographic identifier and should be treated as categorical.
+
+# Binary encoding -> columns including AttachedGarageYN, FireplaceYN, NewConstructionYN, PoolPrivateYN, and ViewYN.
+# Reasons: These variables indicate the presence or absence of specific property attributes. Convert to 0/1.
+
+# One-Hot Encoding -> columns including PropertyType, PropertySubType, Levels, MlsStatus, and StateOrProvince.
+# Reasons: These variables are nominal categories without inherent ordering.
+
+# Categorical -> columns including City, CountyOrParish, and MLSAreaMajor.
+# Reasons: These variables capture geographic variation in housing markets. 
+# If the number of unique categories is moderate, one-hot encoding can be applied. 
+# If cardinality is high, grouping or alternative encoding methods may be considered to control feature dimensionality.
+
+# Date extraction -> columns including CloseDate.
+# Reasons: Raw date values are not directly meaningful for modeling. 
+# We extracting components such as year and month to capture seasonality and temporal market trends in property transactions.
+
+# Numeric features keep as it is as continuous variables -> columns including Latitude, Longitude, YearBuilt, BedroomsTotal, MainLevelBedrooms, ParkingTotal, AssociationFee, DaysOnMarket, and StreetNumberNumeric.
+# Reasons: They are inherently numerical. 
+
+# Target variable -> ClosePrice.
+# Reasons: used as the prediction target.
+
+####
+
+
 # Get data withing restriction.
 # Params: columns = required columns
 def get_unprocessed_data(accessor: DataIngestion, columns=None, aggregations = None):
@@ -115,7 +145,7 @@ def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
     return [X.columns.get_loc(c) for c in cat_cols if c in X.columns]
 
 
-### Huiyu: ColumnTransformer preprocessor
+#### Huiyu: ColumnTransformer preprocessor
 def build_sklearn_preprocessor(
     X: pd.DataFrame,
     categorical_cols: list[str],
