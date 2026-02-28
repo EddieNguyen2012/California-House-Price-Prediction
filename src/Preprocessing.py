@@ -7,9 +7,8 @@ import os
 ##### List of usable columns from Jenny's EDA
 columns_to_use = [
 # --- Agent & Office Info ---
-"""
-I dropped all these columns.
-"""
+'BuyerAgentAOR', 'BuyerAgentFirstName', 'BuyerAgentLastName', 'BuyerAgentMlsId',
+'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
 
 # --- Location & Address ---
 'City', 'CountyOrParish', 'HighSchoolDistrict', 'Latitude', 'Longitude',
