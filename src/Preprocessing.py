@@ -25,10 +25,12 @@ columns_to_use = [
 'LotSizeAcres', 'LotSizeArea', 'LotSizeSquareFeet',
 
 # --- Transaction & Status ---
-'AssociationFee', 'CloseDate', 'ClosePrice', 'ContractStatusChangeDate',
-'DaysOnMarket', 'MlsStatus', 'PurchaseContractDate',
+'AssociationFee', 'CloseDate', 'ClosePrice', 'DaysOnMarket', 'MlsStatus',
 ]
 #######
+
+# Median imputation -> columns including LivingArea, LotSizeAcres, LotSizeArea, LotSizeSquareFeet, BathroomsTotalInteger, Stories, and GarageSpaces.
+# Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns.
 
 # Get data withing restriction.
 # Params: columns = required columns
@@ -155,6 +157,29 @@ def build_sklearn_preprocessor(
     )
     return preprocessor
 
+
+####### Jenny (median imputation)
+def compute_medians(df: pd.DataFrame) -> pd.Series:
+    cols_impute = [
+        "LivingArea",
+        "LotSizeAcres",
+        "LotSizeArea",
+        "LotSizeSquareFeet",
+        "BathroomsTotalInteger",
+        "Stories",
+        "GarageSpaces",
+    ]
+    
+    cols_impute = [col for col in cols_impute if col in df.columns]
+    
+    return df[cols_impute].median()
+
+def impute_with_medians(df: pd.DataFrame, medians: pd.Series) -> pd.DataFrame:
+    df = df.copy()
+    df[medians.index] = df[medians.index].fillna(medians)
+    return df
+#######
+
 if __name__ == "__main__":
     accessor = DataIngestion(pathfinder.CSV_DIR)
 
@@ -165,6 +190,9 @@ if __name__ == "__main__":
 
     df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
     df.drop('CloseDate', axis=1, inplace=True)
+
+    medians = compute_medians(df)
+    df = impute_with_medians(df, medians)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
 
