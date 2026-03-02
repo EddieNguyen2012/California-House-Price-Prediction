@@ -34,6 +34,36 @@ columns_to_use = [
 # Median imputation -> columns including LivingArea, LotSizeAcres, LotSizeArea, LotSizeSquareFeet, BathroomsTotalInteger, Stories, and GarageSpaces.
 # Reasons: The median LivingArea of 1,810 square feet represents a typical suburban single-family home; The median lot size of approximately 7,200 square feet is consistent with standard residential parcels in Southern California; Similarly, the median values of 2 bathrooms, 1 story, and 2 garage spaces reflect common housing configurations in California suburban areas. So median imputation seems reasonable for these columns.
 
+
+#### Huiyu's Feature Handling Plan
+
+# Zip code parsing -> columns including PostalCode.
+# Reasons: PostalCode is a geographic identifier and should be treated as categorical.
+
+# Binary encoding -> columns including AttachedGarageYN, FireplaceYN, NewConstructionYN, PoolPrivateYN, and ViewYN.
+# Reasons: These variables indicate the presence or absence of specific property attributes. Convert to 0/1.
+
+# One-Hot Encoding -> columns including PropertyType, PropertySubType, Levels, MlsStatus, and StateOrProvince.
+# Reasons: These variables are nominal categories without inherent ordering.
+
+# Categorical -> columns including City, CountyOrParish, and MLSAreaMajor.
+# Reasons: These variables capture geographic variation in housing markets. 
+# If the number of unique categories is moderate, one-hot encoding can be applied. 
+# If cardinality is high, grouping or alternative encoding methods may be considered to control feature dimensionality.
+
+# Date extraction -> columns including CloseDate.
+# Reasons: Raw date values are not directly meaningful for modeling. 
+# We extracting components such as year and month to capture seasonality and temporal market trends in property transactions.
+
+# Numeric features keep as it is as continuous variables -> columns including Latitude, Longitude, YearBuilt, BedroomsTotal, MainLevelBedrooms, ParkingTotal, AssociationFee, DaysOnMarket, and StreetNumberNumeric.
+# Reasons: They are inherently numerical. 
+
+# Target variable -> ClosePrice.
+# Reasons: used as the prediction target.
+
+####
+
+
 # Get data withing restriction.
 # Params: columns = required columns
 def get_unprocessed_data(accessor: DataIngestion, columns=None, aggregations = None):
@@ -98,6 +128,67 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
         os.makedirs(path)
 
     df.to_csv(os.path.join(path, 'clean_data.csv'))
+
+
+#### Huiyu: Helper function for imputation
+def build_imputer(strategy: str = "median"):
+    """
+    options for strategy:
+    - "median"
+    - "mean"
+    - "most_frequent"
+    - "constant"
+    """
+    from sklearn.impute import SimpleImputer
+    return SimpleImputer(strategy=strategy)
+
+
+#### Huiyu: Helper function to get categorical feature indices by column names
+def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
+    return [X.columns.get_loc(c) for c in cat_cols if c in X.columns]
+
+
+#### Huiyu: ColumnTransformer preprocessor
+# def build_sklearn_preprocessor(
+#     X: pd.DataFrame,
+#     categorical_cols: list[str],
+#     numeric_cols = None,
+#     scale_numeric: bool = True,
+# ):
+#     """
+#     This is a preprocessing ColumnTransformer:
+#     - numeric: median impute (+ optional scaling)
+#     - categorical: most_frequent impute + one-hot
+#     """
+#     from sklearn.compose import ColumnTransformer
+#     from sklearn.pipeline import Pipeline
+#     from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+#     if numeric_cols is None:
+#         numeric_cols = [c for c in X.columns if c not in categorical_cols]
+
+#     num_imputer = build_imputer("median")
+#     cat_imputer = build_imputer("most_frequent")
+
+#     num_steps = [("imputer", num_imputer)]
+#     if scale_numeric:
+#         num_steps.append(("scaler", StandardScaler()))
+#     num_pipe = Pipeline(steps=num_steps)
+
+#     cat_pipe = Pipeline(steps=[
+#         ("imputer", cat_imputer),
+#         ("onehot", OneHotEncoder(handle_unknown="ignore")),
+#     ])
+
+#     preprocessor = ColumnTransformer(
+#         transformers=[
+#             ("num", num_pipe, numeric_cols),
+#             ("cat", cat_pipe, categorical_cols),
+#         ],
+#         remainder="drop",
+#         verbose_feature_names_out=False,
+#     )
+#     return preprocessor
 
 def normalize(series: pd.Series, technique):
     if technique == "minmax":
