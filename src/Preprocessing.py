@@ -6,8 +6,6 @@ from src.Pipeline.Feature_Engineering import baseline_feature_engineer
 from sklearn.model_selection import train_test_split
 import os
 
-### Init Database
-db_conn = DataIngestion(data_path=pathfinder.CSV_DIR)
 ##### List of usable columns from Jenny's EDA. Change this to get more columns
 columns_to_use = [
 
@@ -73,7 +71,7 @@ columns_to_use = [
 
 # Get data withing restriction.
 # Params: columns = required columns
-def get_unprocessed_data(columns=None, aggregations = None):
+def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfinder.CSV_DIR), columns=None, aggregations = None):
 
     if columns is None:
         columns = columns_to_use
@@ -81,47 +79,41 @@ def get_unprocessed_data(columns=None, aggregations = None):
         columns = columns.append(aggregations)
 
     # Optimized query from Johnny's EDA
-    df = db_conn.query(
+    df = accessor.query(
         f"""
-            SELECT {', '.join(columns)}
-            FROM Property
-            WHERE PropertyType = 'Residential'
-              AND PropertySubType = 'SingleFamilyResidence'
-              AND ClosePrice > 0
-              AND LivingArea > 0
-              AND Latitude IS NOT NULL
-              AND Longitude IS NOT NULL
-              AND Latitude BETWEEN 32 AND 43
-              AND Longitude BETWEEN -125 AND -113
-              AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 100000 OFFSET 1)
+        SELECT {', '.join(columns)}
+        FROM Property
+        WHERE PropertyType = 'Residential'
+          AND PropertySubType = 'SingleFamilyResidence'
+          AND ClosePrice > 0
+          AND LivingArea > 0
+          AND Latitude IS NOT NULL
+          AND Longitude IS NOT NULL
+          AND Latitude BETWEEN 32 AND 43
+          AND Longitude BETWEEN -125 AND -113
         """
     )
     return df
 
-def get_eval_data(columns=None) -> pd.DataFrame:
-    if columns is None:
-        columns = columns_to_use
-        data = db_conn.query(
-            f"""
-                SELECT {', '.join(columns)}
-                FROM Property
-                WHERE PropertyType = 'Residential'
-                  AND PropertySubType = 'SingleFamilyResidence'
-                  AND ClosePrice > 0
-                  AND LivingArea > 0
-                  AND Latitude IS NOT NULL
-                  AND Longitude IS NOT NULL
-                  AND Latitude BETWEEN 32 AND 43
-                  AND Longitude BETWEEN -125 AND -113
-                  AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 1)
-            """
-        )
-        return preprocess_data(data, output_as='df', use_for="baseline")
-    print(f'Database not found')
-    return None
-
-
 # To be used for trimming test set ClosePrice outliers
+###### Eddie's Code
+def cyclical_encoding(x):
+    return np.sin(2 * np.pi * (x.month/12.0))
+
+def zipcode_parse(org: str):
+    if org is not None:
+
+        ### Jenny add a line
+        org = str(org)
+        ###
+        
+        if len(org) >= 5:
+            return int(org[:5])
+        else:
+            return 0
+    else:
+        return 0
+
 def trimming_quantiles(X, y, quantile=0.05):
     if not (0 <= quantile < 0.5):
         raise ValueError("quantile must be in [0, 0.5)")
@@ -131,10 +123,9 @@ def trimming_quantiles(X, y, quantile=0.05):
     return X.loc[mask], y.loc[mask]
 
 # Splits into training and test set, where test set is random 20% of observations. Includes trimming.
-def train_test_split_with_trimming(df, y, quantile=0.05, test_size=0.2, random_state=42):
+def train_test_split_with_trimming(df, y, test_size=0.2, random_state=42):
     X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=test_size, random_state=random_state)
-    X_test, y_test = trimming_quantiles(X_test, y_test, quantile=quantile)
-    print(f'Trimmed {quantile*100}% of data on both sets independently.')
+    X_test, y_test = trimming_quantiles(X_test, y_test)
     return X_train, X_test, y_train, y_test
 
 # Johnny: Splits into training and test set, where test set is most recent month of data. Includes trimming.
@@ -176,11 +167,129 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 # Johnny made changes
 # For baseline testing, call function without arguments
 # To do your own imputation/normalization/feature engineering, change use_for.
-def preprocess_data(df, output_as: str = "standard_split", use_for: str = "baseline"):
+def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_split", use_for: str = "baseline"):
+
+#### Huiyu: Helper function for imputation
+def build_imputer(strategy: str = "median"):
+    """
+    options for strategy:
+    - "median"
+    - "mean"
+    - "most_frequent"
+    - "constant"
+    """
+    from sklearn.impute import SimpleImputer
+    return SimpleImputer(strategy=strategy)
+
+
+#### Huiyu: Helper function to get categorical feature indices by column names
+def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
+    return [X.columns.get_loc(c) for c in cat_cols if c in X.columns]
+
+
+#### Huiyu: ColumnTransformer preprocessor
+# def build_sklearn_preprocessor(
+#     X: pd.DataFrame,
+#     categorical_cols: list[str],
+#     numeric_cols = None,
+#     scale_numeric: bool = True,
+# ):
+#     """
+#     This is a preprocessing ColumnTransformer:
+#     - numeric: median impute (+ optional scaling)
+#     - categorical: most_frequent impute + one-hot
+#     """
+#     from sklearn.compose import ColumnTransformer
+#     from sklearn.pipeline import Pipeline
+#     from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+#     if numeric_cols is None:
+#         numeric_cols = [c for c in X.columns if c not in categorical_cols]
+
+#     num_imputer = build_imputer("median")
+#     cat_imputer = build_imputer("most_frequent")
+
+#     num_steps = [("imputer", num_imputer)]
+#     if scale_numeric:
+#         num_steps.append(("scaler", StandardScaler()))
+#     num_pipe = Pipeline(steps=num_steps)
+
+#     cat_pipe = Pipeline(steps=[
+#         ("imputer", cat_imputer),
+#         ("onehot", OneHotEncoder(handle_unknown="ignore")),
+#     ])
+
+#     preprocessor = ColumnTransformer(
+#         transformers=[
+#             ("num", num_pipe, numeric_cols),
+#             ("cat", cat_pipe, categorical_cols),
+#         ],
+#         remainder="drop",
+#         verbose_feature_names_out=False,
+#     )
+#     return preprocessor
+
+def normalize(series: pd.Series, technique):
+    if technique == "minmax":
+        normalizer = MinMaxScaler()
+        return normalizer.fit_transform(series)
+    elif technique == "standard":
+        normalizer = StandardScaler()
+        return normalizer.fit_transform(series)
+    else:
+        raise ValueError("Unknown normalization type")
+
+def destack(x):
+    ### Jenny changed some
+    if pd.isna(x):
+        return None
+    else:
+        return str(x).split(',')
+    ###
+
+def extract_stacked_data(df, feature):
+    extracted = df[feature].apply(destack)
+    unique = set()
+    for entry in extracted:
+        if entry is not None:
+            for floor_type in entry:
+                unique.add(floor_type)
+    return list(unique)
+
+def stacked_data_encode(df, feature):
+    unique_ordered = extract_stacked_data(df, feature)
+
+    def mapping(x):
+        if x is None:
+            return np.zeros(len(unique_ordered))
+        else:
+            mapper = np.zeros(len(unique_ordered))
+            for category in x:
+                if category in unique_ordered:
+                    mapper[unique_ordered.index(category)] = 1
+
+            return mapper
+
+    extracted = df[feature].apply(destack)
+    mapped = extracted.apply(mapping)
+    unique_ordered = [feature + '_' + x for x in unique_ordered]
+    mapped = pd.DataFrame(np.vstack(mapped), columns=unique_ordered)
+
+    return mapped, unique_ordered
+
+def bool_encode(x):
+    if x is None or type(x) is not bool:
+        return 0
+    if x:
+        return 1
+    else:
+        return 0
+
+
+def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neighbors: int = 5, knn_weights: str = 'distance'):
     '''
     Pipeline function.
 
-    :param df: The data to be processed.
     :param path: path to raw csv files. (by default it is ../IDX_data)
     :param output_as: Choose between several options:
         "csv": saves processed csv to path
@@ -191,49 +300,32 @@ def preprocess_data(df, output_as: str = "standard_split", use_for: str = "basel
     '''
 
     ## Read required data
-    print(f'Processing {df.shape[0]} rows of data.')
+    df = get_unprocessed_data(columns=columns_to_use)
+
     if use_for == "baseline":
         df = baseline_feature_engineer(df)
-        print("Finished feature engineering.")
         df = baseline_impute_normalize(df)
-        print("Finished imputation.")
 
 
     if output_as == "csv":
         store_data_in_csv(df, path=pathfinder.OUTPUT_DIR)
-        return None
-    elif output_as == "random_split":
+    if output_as == "random_split":
+        df.drop('CloseDate', axis=1,inplace=True)
+        y = df['log_price']
+        df.drop('log_price', axis=1, inplace=True) 
+        return train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+    if output_as == "standard_split":
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True)
-        x_train, x_test, y_train, y_test = train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
-        print(f'Finished random splitting data into train and test sets!')
-    elif output_as == "standard_split":
-        y = df['log_price']
-        df.drop('log_price', axis=1, inplace=True)
-        x_train, x_test, y_train, y_test = train_test_recent_month(df,y)
-        print(f'Finished standard splitting data into train and test sets!')
+        x_train, x_test, y_train, y_test = train_test_recent_month(df,y) 
+        x_train.drop('CloseDate', axis=1, inplace=True)
+        x_test.drop('CloseDate',axis=1, inplace=True)
+        return x_train, x_test, y_train, y_test
     else:
         return df
 
-    print(
-        f"""
-        Finished processing pipeline. Result shapes: 
-        X_train: {x_train.shape}
-        X_test: {x_test.shape}
-        y_train: {len(y_train)}
-        y_test: {len(y_test)}
-        """
-    )
-    return x_train, x_test, y_train, y_test
 
 
-def get_preprocessed_data(output_as: str = "standard_split", use_for: str = "baseline"):
-    df = get_unprocessed_data()
-    return preprocess_data(df, output_as, use_for)
-
-
-if __name__ == "__main__":
-    X_train, X_test, y_train, y_test = get_preprocessed_data(output_as='random_split')
 
 
 
