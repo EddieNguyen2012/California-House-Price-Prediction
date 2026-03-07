@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import src.path_finder as pathfinder
+import datetime as dt
 from src.Ingestion import DataIngestion
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
@@ -9,6 +10,10 @@ import os
 
 ##### List of usable columns from Jenny's EDA. Change this to get more columns
 columns_to_use = [
+
+# --- Other/future Use Cases. Drop when modeling for now --- 
+
+     
 # --- Agent & Office Info ---
 # 'BuyerAgentAOR', 'BuyerAgentFirstName', 'BuyerAgentLastName', 'BuyerAgentMlsId',
 # 'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
@@ -118,6 +123,32 @@ def train_test_split_with_trimming(df, y, test_size=0.2, random_state=42):
     X_train, y_train = trimming_quantiles(X_train, y_train)
     X_test, y_test = trimming_quantiles(X_test, y_test)
     return X_train, X_test, y_train, y_test
+
+####### (Johnny) Splits into training and test set, where test set is most recent month of data. Includes trimming.
+def train_test_recent_month(df, y, date_col="CloseDate"):
+
+    df = df.copy()
+    df[date_col] = pd.to_datetime(df[date_col])
+
+    # Find most recent month
+    latest_month = df[date_col].dt.to_period("M").max()
+
+    # Mask for test set
+    test_mask = df[date_col].dt.to_period("M") == latest_month
+
+    # Split
+    X_train = df.loc[~test_mask]
+    X_test = df.loc[test_mask]
+    y_train = y.loc[~test_mask]
+    y_test = y.loc[test_mask]
+
+    # Apply trimming
+    X_train, y_train = trimming_quantiles(X_train, y_train)
+    X_test, y_test = trimming_quantiles(X_test, y_test)
+
+    return X_train, X_test, y_train, y_test
+####  Eddie's code continues from here.
+
 
 def store_data_in_parquet(df: pd.DataFrame, path=None):
     if not os.path.exists(path):
@@ -321,7 +352,7 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
     df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
 
     df['sin_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
-    df.drop('CloseDate', axis=1, inplace=True)
+
 
     # medians = compute_medians(df)
     # df = impute_with_medians(df, medians)
@@ -372,7 +403,11 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
     if split:
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True)
-        return train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+        x_train, x_test, y_train, y_test = train_test_recent_month(df,y) 
+        # x_train, x_test, y_train, y_test = train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+        x_train.drop('CloseDate', axis=1, inplace=True)
+        x_test.drop('CloseDate',axis=1, inplace=True)
+        return x_train, x_test, y_train, y_test
     else:
         return df
 
