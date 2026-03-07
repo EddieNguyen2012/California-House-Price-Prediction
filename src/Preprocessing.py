@@ -98,7 +98,7 @@ def cyclical_encoding(x):
 def zipcode_parse(org: str):
     if org is not None:
         if len(org) >= 5:
-            return org[:5]
+            return int(org[:5])
         else:
             return 0
     else:
@@ -202,29 +202,38 @@ def normalize(series: pd.Series, technique):
     else:
         raise ValueError("Unknown normalization type")
 
-def flooring_encode(df):
-    unique_ordered = ['Bamboo', 'Brick', 'Carpet', 'Concrete', 'Laminate', 'Stone', 'Tile', 'Vinyl', 'Wood']
+def destack(x):
+    if x is None:
+        return None
+    else:
+        return x.split(',')
 
-    def map_floor_type(x):
+def extract_stacked_data(df, feature):
+    extracted = df[feature].apply(destack)
+    unique = set()
+    for entry in extracted:
+        if entry is not None:
+            for floor_type in entry:
+                unique.add(floor_type)
+    return list(unique)
+
+def stacked_data_encode(df, feature):
+    unique_ordered = extract_stacked_data(df, feature)
+
+    def mapping(x):
         if x is None:
             return np.zeros(len(unique_ordered))
         else:
             mapper = np.zeros(len(unique_ordered))
-            for floor_type in x:
-                if floor_type in unique_ordered:
-                    mapper[unique_ordered.index(floor_type)] = 1
+            for category in x:
+                if category in unique_ordered:
+                    mapper[unique_ordered.index(category)] = 1
 
             return mapper
 
-    def extract_floor_type(x):
-        if x is None:
-            return None
-        else:
-            return x.split(',')
-
-    extracted = df['Flooring'].apply(extract_floor_type)
-    mapped = extracted.apply(map_floor_type)
-    unique_ordered = ["Floor_" + x for x in unique_ordered]
+    extracted = df[feature].apply(destack)
+    mapped = extracted.apply(mapping)
+    unique_ordered = [feature + '_' + x for x in unique_ordered]
     mapped = pd.DataFrame(np.vstack(mapped), columns=unique_ordered)
 
     return mapped, unique_ordered
@@ -311,7 +320,7 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
     # print(df.columns)
     df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
 
-    df['engineered_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
+    df['sin_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
     df.drop('CloseDate', axis=1, inplace=True)
 
     # medians = compute_medians(df)
@@ -328,9 +337,11 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
         "GarageSpaces",
     ]
     df[cols_median_impute] = impute(df, target_col=cols_median_impute, technique="median")
-    flooring_mapped, flooring_types = flooring_encode(df)
-    df[flooring_types] = flooring_mapped
-    df.drop(['Flooring'], axis=1, inplace=True)
+    for feature in ['Flooring', 'Levels']:
+        mapped, types = stacked_data_encode(df, feature)
+        df[types] = mapped
+        df.drop([feature], axis=1, inplace=True)
+
     # boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
     # for col in boolean_cols:
     #     df[col] = df[col].apply(bool_encode)
