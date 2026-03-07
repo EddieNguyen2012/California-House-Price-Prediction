@@ -14,8 +14,9 @@ columns_to_use = [
 # 'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
 
 # --- Location & Address ---
-'City', 'CountyOrParish', 'HighSchoolDistrict', 'Latitude', 'Longitude',
-'MLSAreaMajor', 'PostalCode', 'StateOrProvince', 'StreetNumberNumeric',
+## Eddie removed due to overlap info 'MLSAreaMajor', 'StateOrProvince', 'HighSchoolDistrict', 'CountyOrParish', 'City',
+'Latitude', 'Longitude',
+'PostalCode', 'StreetNumberNumeric',
 
 # --- Property Specs ---
 'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
@@ -54,6 +55,7 @@ columns_to_use = [
 # Date extraction -> columns including CloseDate.
 # Reasons: Raw date values are not directly meaningful for modeling. 
 # We extracting components such as year and month to capture seasonality and temporal market trends in property transactions.
+# Eddie's note: month is encoded using cyclical engineering using sin and cos function to simulate the cyclical nature of the data
 
 # Numeric features keep as it is as continuous variables -> columns including Latitude, Longitude, YearBuilt, BedroomsTotal, MainLevelBedrooms, ParkingTotal, AssociationFee, DaysOnMarket, and StreetNumberNumeric.
 # Reasons: They are inherently numerical. 
@@ -200,6 +202,41 @@ def normalize(series: pd.Series, technique):
     else:
         raise ValueError("Unknown normalization type")
 
+def flooring_encode(df):
+    unique_ordered = ['Bamboo', 'Brick', 'Carpet', 'Concrete', 'Laminate', 'Stone', 'Tile', 'Vinyl', 'Wood']
+
+    def map_floor_type(x):
+        if x is None:
+            return np.zeros(len(unique_ordered))
+        else:
+            mapper = np.zeros(len(unique_ordered))
+            for floor_type in x:
+                if floor_type in unique_ordered:
+                    mapper[unique_ordered.index(floor_type)] = 1
+
+            return mapper
+
+    def extract_floor_type(x):
+        if x is None:
+            return None
+        else:
+            return x.split(',')
+
+    extracted = df['Flooring'].apply(extract_floor_type)
+    mapped = extracted.apply(map_floor_type)
+    unique_ordered = ["Floor_" + x for x in unique_ordered]
+    mapped = pd.DataFrame(np.vstack(mapped), columns=unique_ordered)
+
+    return mapped, unique_ordered
+
+def bool_encode(x):
+    if x is None or type(x) is not bool:
+        return 0
+    if x:
+        return 1
+    else:
+        return 0
+
 
 def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neighbors: int = 5, knn_weights: str = 'distance'):
     '''
@@ -291,12 +328,19 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
         "GarageSpaces",
     ]
     df[cols_median_impute] = impute(df, target_col=cols_median_impute, technique="median")
+    flooring_mapped, flooring_types = flooring_encode(df)
+    df[flooring_types] = flooring_mapped
+    df.drop(['Flooring'], axis=1, inplace=True)
+    # boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
+    # for col in boolean_cols:
+    #     df[col] = df[col].apply(bool_encode)
+
 
     ### Engineered features
     # PostalCode -> zipcode_parse()
     # CloseDate -> cyclical_encoding()
     # ClosePrice -> zipcode_parse()
-
+    # AttachedGarageYN, FireplaceYN, NewConstructionYN, PoolPrivateYN, and ViewYN -> bool_encode()
     ### Imputed features:
     ## Median:
     # "LivingArea",
