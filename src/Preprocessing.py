@@ -4,7 +4,7 @@ import src.path_finder as pathfinder
 import datetime as dt
 from src.Ingestion import DataIngestion
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.impute import SimpleImputer, KNNImputer
 import os
 
@@ -143,7 +143,6 @@ def train_test_recent_month(df, y, date_col="CloseDate"):
     y_test = y.loc[test_mask]
 
     # Apply trimming
-    X_train, y_train = trimming_quantiles(X_train, y_train)
     X_test, y_test = trimming_quantiles(X_test, y_test)
 
     return X_train, X_test, y_train, y_test
@@ -223,15 +222,17 @@ def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
 #     )
 #     return preprocessor
 
-def normalize(series: pd.Series, technique):
-    if technique == "minmax":
-        normalizer = MinMaxScaler()
-        return normalizer.fit_transform(series)
-    elif technique == "standard":
-        normalizer = StandardScaler()
-        return normalizer.fit_transform(series)
-    else:
+def normalize(series: pd.Series, technique: str):
+    t = {
+        "minmax": MinMaxScaler(),
+        "standard": StandardScaler(),
+        "robust": RobustScaler()
+    }
+    try:
+        normalizer = t[technique]
+    except: 
         raise ValueError("Unknown normalization type")
+    return normalizer.fit_transform(series)
 
 def destack(x):
     if x is None:
@@ -348,16 +349,23 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
 
     ## Read required data
     df = get_unprocessed_data(accessor= accessor, columns=columns_to_use)
-    # print(df.columns)
-    df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
 
+    ########### PROCESSING BEGINS HERE #############
+    # PostalCode
+    df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
+    df = df[df['PostalCode'].astype(str).str.startswith('9')] # dropping zip codes outside of California (~1 in 10000 roughly)
+
+    # CloseDate - 
     df['sin_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
 
+    # DaysOnMarket - Changing negaive values to positive ones (~1 in 10000 entries)
+    df['DaysOnMarket'] = np.abs(df['DaysOnMarket']) 
 
     # medians = compute_medians(df)
     # df = impute_with_medians(df, medians)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
+    df.drop('ClosePrice', axis=1, inplace=True)
     cols_median_impute = [
         "LivingArea",
         "LotSizeAcres",
