@@ -1,14 +1,19 @@
 import pandas as pd
 import numpy as np
 import src.path_finder as pathfinder
+import datetime as dt
 from src.Ingestion import DataIngestion
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.impute import SimpleImputer, KNNImputer
 import os
 
 ##### List of usable columns from Jenny's EDA. Change this to get more columns
 columns_to_use = [
+
+# --- Other/future Use Cases. Drop when modeling for now --- 
+
+     
 # --- Agent & Office Info ---
 # 'BuyerAgentAOR', 'BuyerAgentFirstName', 'BuyerAgentLastName', 'BuyerAgentMlsId',
 # 'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
@@ -119,6 +124,31 @@ def train_test_split_with_trimming(df, y, test_size=0.2, random_state=42):
     X_test, y_test = trimming_quantiles(X_test, y_test)
     return X_train, X_test, y_train, y_test
 
+####### (Johnny) Splits into training and test set, where test set is most recent month of data. Includes trimming.
+def train_test_recent_month(df, y, date_col="CloseDate"):
+
+    df = df.copy()
+    df[date_col] = pd.to_datetime(df[date_col])
+
+    # Find most recent month
+    latest_month = df[date_col].dt.to_period("M").max()
+
+    # Mask for test set
+    test_mask = df[date_col].dt.to_period("M") == latest_month
+
+    # Split
+    X_train = df.loc[~test_mask]
+    X_test = df.loc[test_mask]
+    y_train = y.loc[~test_mask]
+    y_test = y.loc[test_mask]
+
+    # Apply trimming
+    X_test, y_test = trimming_quantiles(X_test, y_test)
+
+    return X_train, X_test, y_train, y_test
+####  Eddie's code continues from here.
+
+
 def store_data_in_parquet(df: pd.DataFrame, path=None):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -192,15 +222,17 @@ def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
 #     )
 #     return preprocessor
 
-def normalize(series: pd.Series, technique):
-    if technique == "minmax":
-        normalizer = MinMaxScaler()
-        return normalizer.fit_transform(series)
-    elif technique == "standard":
-        normalizer = StandardScaler()
-        return normalizer.fit_transform(series)
-    else:
+def normalize(series: pd.Series, technique: str):
+    t = {
+        "minmax": MinMaxScaler(),
+        "standard": StandardScaler(),
+        "robust": RobustScaler()
+    }
+    try:
+        normalizer = t[technique]
+    except: 
         raise ValueError("Unknown normalization type")
+    return normalizer.fit_transform(series)
 
 def destack(x):
     if x is None:
@@ -317,16 +349,23 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
 
     ## Read required data
     df = get_unprocessed_data(accessor= accessor, columns=columns_to_use)
-    # print(df.columns)
-    df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
 
+    ########### PROCESSING BEGINS HERE #############
+    # PostalCode
+    df['PostalCode'] = df['PostalCode'].apply(zipcode_parse)
+    df = df[df['PostalCode'].astype(str).str.startswith('9')] # dropping zip codes outside of California (~1 in 10000 roughly)
+
+    # CloseDate - 
     df['sin_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
-    df.drop('CloseDate', axis=1, inplace=True)
+
+    # DaysOnMarket - Changing negaive values to positive ones (~1 in 10000 entries)
+    df['DaysOnMarket'] = np.abs(df['DaysOnMarket']) 
 
     # medians = compute_medians(df)
     # df = impute_with_medians(df, medians)
 
     df['log_price'] = df['ClosePrice'].apply(lambda x: np.log(x))  # Transform close price by logging
+    df.drop('ClosePrice', axis=1, inplace=True)
     cols_median_impute = [
         "LivingArea",
         "LotSizeAcres",
@@ -372,7 +411,11 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
     if split:
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True)
-        return train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+        x_train, x_test, y_train, y_test = train_test_recent_month(df,y) 
+        # x_train, x_test, y_train, y_test = train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+        x_train.drop('CloseDate', axis=1, inplace=True)
+        x_test.drop('CloseDate',axis=1, inplace=True)
+        return x_train, x_test, y_train, y_test
     else:
         return df
 
