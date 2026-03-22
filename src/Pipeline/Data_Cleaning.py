@@ -111,7 +111,7 @@ def baseline_impute_normalize(df: pd.DataFrame):
     Categoricals are imputed by 'most_frequent'
     """
     df = df.copy()
-    
+
     numeric_cols = df.select_dtypes(include='number').columns
 
     # Median imputation of numeric columns
@@ -124,6 +124,7 @@ def baseline_impute_normalize(df: pd.DataFrame):
     boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
     df[boolean_cols] = impute(df, target_col=boolean_cols, technique="boolean")
 
+    
     return df 
 
 """============================= WORK IN PROGRESS ==================================="""

@@ -1,8 +1,8 @@
 import pandas as pd
 import src.path_finder as pathfinder
 from src.Ingestion import DataIngestion
-from src.Preprocessing.Data_Cleaning import baseline_impute_normalize
-from src.Preprocessing.Feature_Engineering import baseline_feature_engineer
+from src.Pipeline.Data_Cleaning import baseline_impute_normalize
+from src.Pipeline.Feature_Engineering import baseline_feature_engineer
 from sklearn.model_selection import train_test_split
 import os
 
@@ -18,7 +18,7 @@ columns_to_use = [
 # ---------- Columns in use ----------------------------------------------
 # --- Location & Address ---
 ## Johnny added CountyOrParish (intuitively should yield more impact than unengineered Lat/Long/Zipcode in baseline testing)
-'Latitude', 'Longitude','PostalCode','CountyOrParish',
+'Latitude', 'Longitude','PostalCode',
 
 # --- Property Specs ---
 'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
@@ -166,6 +166,7 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_sp
     if use_for == "baseline":
         df = baseline_feature_engineer(df)
         df = baseline_impute_normalize(df)
+
 
     if output_as == "csv":
         store_data_in_csv(df, path=pathfinder.OUTPUT_DIR)
