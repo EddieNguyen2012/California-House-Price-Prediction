@@ -17,8 +17,9 @@ columns_to_use = [
 
 # ---------- Columns in use ----------------------------------------------
 # --- Location & Address ---
-## Johnny added CountyOrParish (intuitively should yield more impact than unengineered Lat/Long/Zipcode in baseline testing)
-'Latitude', 'Longitude','PostalCode',
+## Eddie removed due to overlap info 'MLSAreaMajor', 'StateOrProvince', 'HighSchoolDistrict', 'CountyOrParish', 'City', 'StreetNumberNumeric',
+'Latitude', 'Longitude',
+'PostalCode',
 
 # --- Property Specs ---
 'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
