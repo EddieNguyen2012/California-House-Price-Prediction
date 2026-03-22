@@ -19,9 +19,9 @@ columns_to_use = [
 # 'BuyerOfficeAOR', 'BuyerOfficeName', 'ListAgentAOR', 'ListOfficeName',
 
 # --- Location & Address ---
-## Eddie removed due to overlap info 'MLSAreaMajor', 'StateOrProvince', 'HighSchoolDistrict', 'CountyOrParish', 'City',
+## Eddie removed due to overlap info 'MLSAreaMajor', 'StateOrProvince', 'HighSchoolDistrict', 'CountyOrParish', 'City', 'StreetNumberNumeric',
 'Latitude', 'Longitude',
-'PostalCode', 'StreetNumberNumeric',
+'PostalCode',
 
 # --- Property Specs ---
 'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
@@ -165,11 +165,17 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 #### Huiyu: Helper function for imputation
 def build_imputer(strategy: str = "median"):
     """
-    options for strategy:
-    - "median"
-    - "mean"
-    - "most_frequent"
-    - "constant"
+    Builds and returns a scikit-learn SimpleImputer instance based on the specified
+    imputation strategy. The imputer is used for handling missing values in a dataset
+    by replacing them with the specified strategy (e.g., "mean", "median", or "most
+    frequent").
+
+    :param strategy: The imputation strategy to be applied. Valid options are
+        "mean", "median", or "most_frequent". Defaults to "median".
+    :type strategy: str
+    :return: An instance of `SimpleImputer` configured with the given imputation
+        strategy.
+    :rtype: SimpleImputer
     """
     from sklearn.impute import SimpleImputer
     return SimpleImputer(strategy=strategy)
@@ -223,6 +229,20 @@ def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
 #     return preprocessor
 
 def normalize(series: pd.Series, technique: str):
+    """
+    Applies normalization to a given Pandas Series using the specified normalization
+    technique. Supports 'minmax', 'standard', and 'robust' normalization methods.
+    Ensures data scaling based on the selected technique.
+
+    :param series: Input Pandas Series to be normalized.
+    :type series: pd.Series
+    :param technique: Normalization method, which should be one of 'minmax',
+                      'standard', or 'robust'.
+    :type technique: str
+    :return: Transformed normalized data as a NumPy array.
+    :rtype: np.ndarray
+    :raises ValueError: If the specified normalization technique is invalid.
+    """
     t = {
         "minmax": MinMaxScaler(),
         "standard": StandardScaler(),
@@ -235,12 +255,41 @@ def normalize(series: pd.Series, technique: str):
     return normalizer.fit_transform(series)
 
 def destack(x):
+    """
+    Splits a given string into a list of substrings separated by commas.
+
+    This function takes an input string `x` and splits it into a list of
+    substrings wherever a comma is found. If the input is None, it will
+    return None.
+
+    :param x: The input string to split. If None, the function returns None.
+    :type x: str or None
+    :return: The list of substrings obtained by splitting the input string
+        by commas, or None if the input is None.
+    :rtype: list[str] or None
+    """
     if x is None:
         return None
     else:
         return x.split(',')
 
 def extract_stacked_data(df, feature):
+    """
+    Extracts unique elements from a nested structure within a specific column of a DataFrame.
+
+    The function takes a DataFrame and a specified column (feature), processes the column to flatten
+    any nested data structures, and extracts unique elements from these structures. It handles
+    potential `None` values and ensures uniqueness by storing the results in a set.
+
+    :param df: The input pandas DataFrame containing the data to process.
+    :type df: pandas.DataFrame
+    :param feature: The column name within the DataFrame whose nested data is to be flattened and
+        analyzed for unique elements.
+    :type feature: str
+
+    :return: A list of unique elements extracted from the specified column's nested data.
+    :rtype: list
+    """
     extracted = df[feature].apply(destack)
     unique = set()
     for entry in extracted:
@@ -250,6 +299,22 @@ def extract_stacked_data(df, feature):
     return list(unique)
 
 def stacked_data_encode(df, feature):
+    """
+    Encodes stacked categorical data by transforming it into a one-hot encoded DataFrame based on
+    unique categories extracted from the input dataset. This method ensures that the resulting
+    DataFrame captures the presence of individual categories within the stacked data.
+
+    :param df: The input DataFrame containing the stacked categorical data.
+    :type df: pandas.DataFrame
+    :param feature: The column name in the DataFrame representing stacked data to be encoded.
+    :type feature: str
+    :return: A tuple containing the following:
+        - pandas.DataFrame: A one-hot encoded DataFrame with columns representing unique
+          categories from the stacked data.
+        - list: A list of unique feature names corresponding to the columns in the
+          encoded DataFrame.
+    :rtype: tuple
+    """
     unique_ordered = extract_stacked_data(df, feature)
 
     def mapping(x):
@@ -271,6 +336,18 @@ def stacked_data_encode(df, feature):
     return mapped, unique_ordered
 
 def bool_encode(x):
+    """
+    Encodes a boolean value or None as an integer.
+
+    This function converts a boolean input or None into an integer representation.
+    If the input is True, it returns 1. If the input is False or None, it returns 0.
+
+    :param x: The input value to encode. Should be a boolean or None.
+    :type x: bool, None
+    :return: An integer representation of the input where True is 1, and False or
+        None is 0.
+    :rtype: int
+    """
     if x is None or type(x) is not bool:
         return 0
     if x:
@@ -279,15 +356,13 @@ def bool_encode(x):
         return 0
 
 
-def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neighbors: int = 5, knn_weights: str = 'distance'):
+def impute(df: pd.DataFrame, target_col: str | list, technique: str):
     '''
     Optimizing Jenny's imputation function
     Combine all imputation techniques into one function
     :param df: the input dataframe
     :param target_col: column(s) to impute
     :param technique: 'mean', 'median', 'knn'
-    :param knn_n_neighbors: if technique is 'knn', this indicates n_neighbors
-    :param knn_weights: 'uniform', 'distance'
     :return:
     '''
     if technique == "median":
@@ -295,9 +370,6 @@ def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neigh
         return imputer.fit_transform(df[target_col])
     elif technique == "mean":
         imputer = SimpleImputer(strategy="mean")
-        return imputer.fit_transform(df[target_col])
-    elif technique == "knn":
-        imputer = KNNImputer(n_neighbors=knn_n_neighbors, weights=knn_weights)
         return imputer.fit_transform(df[target_col])
     return None
 
@@ -381,7 +453,9 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, split: bool = False, to_file:
         df[types] = mapped
         df.drop([feature], axis=1, inplace=True)
 
+    # df.drop('StreetNumberNumeric', axis=1, inplace=True)
     # boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
+
     # for col in boolean_cols:
     #     df[col] = df[col].apply(bool_encode)
 
