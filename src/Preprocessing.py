@@ -96,24 +96,6 @@ def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfin
     return df
 
 # To be used for trimming test set ClosePrice outliers
-###### Eddie's Code
-def cyclical_encoding(x):
-    return np.sin(2 * np.pi * (x.month/12.0))
-
-def zipcode_parse(org: str):
-    if org is not None:
-
-        ### Jenny add a line
-        org = str(org)
-        ###
-        
-        if len(org) >= 5:
-            return int(org[:5])
-        else:
-            return 0
-    else:
-        return 0
-
 def trimming_quantiles(X, y, quantile=0.05):
     if not (0 <= quantile < 0.5):
         raise ValueError("quantile must be in [0, 0.5)")
@@ -168,125 +150,6 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 # For baseline testing, call function without arguments
 # To do your own imputation/normalization/feature engineering, change use_for.
 def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_split", use_for: str = "baseline"):
-
-#### Huiyu: Helper function for imputation
-def build_imputer(strategy: str = "median"):
-    """
-    options for strategy:
-    - "median"
-    - "mean"
-    - "most_frequent"
-    - "constant"
-    """
-    from sklearn.impute import SimpleImputer
-    return SimpleImputer(strategy=strategy)
-
-
-#### Huiyu: Helper function to get categorical feature indices by column names
-def get_cat_feature_indices(X: pd.DataFrame, cat_cols: list[str]):
-    return [X.columns.get_loc(c) for c in cat_cols if c in X.columns]
-
-
-#### Huiyu: ColumnTransformer preprocessor
-# def build_sklearn_preprocessor(
-#     X: pd.DataFrame,
-#     categorical_cols: list[str],
-#     numeric_cols = None,
-#     scale_numeric: bool = True,
-# ):
-#     """
-#     This is a preprocessing ColumnTransformer:
-#     - numeric: median impute (+ optional scaling)
-#     - categorical: most_frequent impute + one-hot
-#     """
-#     from sklearn.compose import ColumnTransformer
-#     from sklearn.pipeline import Pipeline
-#     from sklearn.preprocessing import OneHotEncoder, StandardScaler
-
-#     if numeric_cols is None:
-#         numeric_cols = [c for c in X.columns if c not in categorical_cols]
-
-#     num_imputer = build_imputer("median")
-#     cat_imputer = build_imputer("most_frequent")
-
-#     num_steps = [("imputer", num_imputer)]
-#     if scale_numeric:
-#         num_steps.append(("scaler", StandardScaler()))
-#     num_pipe = Pipeline(steps=num_steps)
-
-#     cat_pipe = Pipeline(steps=[
-#         ("imputer", cat_imputer),
-#         ("onehot", OneHotEncoder(handle_unknown="ignore")),
-#     ])
-
-#     preprocessor = ColumnTransformer(
-#         transformers=[
-#             ("num", num_pipe, numeric_cols),
-#             ("cat", cat_pipe, categorical_cols),
-#         ],
-#         remainder="drop",
-#         verbose_feature_names_out=False,
-#     )
-#     return preprocessor
-
-def normalize(series: pd.Series, technique):
-    if technique == "minmax":
-        normalizer = MinMaxScaler()
-        return normalizer.fit_transform(series)
-    elif technique == "standard":
-        normalizer = StandardScaler()
-        return normalizer.fit_transform(series)
-    else:
-        raise ValueError("Unknown normalization type")
-
-def destack(x):
-    ### Jenny changed some
-    if pd.isna(x):
-        return None
-    else:
-        return str(x).split(',')
-    ###
-
-def extract_stacked_data(df, feature):
-    extracted = df[feature].apply(destack)
-    unique = set()
-    for entry in extracted:
-        if entry is not None:
-            for floor_type in entry:
-                unique.add(floor_type)
-    return list(unique)
-
-def stacked_data_encode(df, feature):
-    unique_ordered = extract_stacked_data(df, feature)
-
-    def mapping(x):
-        if x is None:
-            return np.zeros(len(unique_ordered))
-        else:
-            mapper = np.zeros(len(unique_ordered))
-            for category in x:
-                if category in unique_ordered:
-                    mapper[unique_ordered.index(category)] = 1
-
-            return mapper
-
-    extracted = df[feature].apply(destack)
-    mapped = extracted.apply(mapping)
-    unique_ordered = [feature + '_' + x for x in unique_ordered]
-    mapped = pd.DataFrame(np.vstack(mapped), columns=unique_ordered)
-
-    return mapped, unique_ordered
-
-def bool_encode(x):
-    if x is None or type(x) is not bool:
-        return 0
-    if x:
-        return 1
-    else:
-        return 0
-
-
-def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neighbors: int = 5, knn_weights: str = 'distance'):
     '''
     Pipeline function.
 
@@ -323,7 +186,6 @@ def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neigh
         return x_train, x_test, y_train, y_test
     else:
         return df
-
 
 
 
