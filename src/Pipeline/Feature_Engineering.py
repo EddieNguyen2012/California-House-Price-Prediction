@@ -20,11 +20,16 @@ import pandas as pd
 # Eddie: Yes it is :)
 
 # Functions working with stacked data are for columns with list values (i.e. Flooring)
+# def destack(x):
+#    if x is None:
+#        return None
+#    else:
+#        return x.split(',')
+
 def destack(x):
-    if x is None:
+    if pd.isna(x):
         return None
-    else:
-        return x.split(',')
+    return str(x).split(",")
 
 def extract_stacked_data(df, feature):
     extracted = df[feature].apply(destack)
@@ -61,7 +66,7 @@ def cyclical_encoding(x):
     return np.sin(2 * np.pi * (x.month/12.0))
 
 # Parse PostalCode column into 5-digit integer format - want to encode categorically in future.
-def zipcode_parse(org: str):
+# def zipcode_parse(org: str):
     if org is not None:
         if len(org) >= 5:
             return int(org[:5])
@@ -70,6 +75,16 @@ def zipcode_parse(org: str):
     else:
         return 0
 
+def zipcode_parse(org):
+    if org is None:
+        return None
+
+    org = str(org)
+
+    if len(org) >= 5:
+        return int(org[:5])
+    else:
+        return None
 """================================ IN USE ==========================="""
 
 def baseline_feature_engineer(df: pd.DataFrame):
