@@ -71,7 +71,8 @@ columns_to_use = [
 
 # Get data withing restriction.
 # Params: columns = required columns
-def get_unprocessed_data(accessor: DataIngestion, columns=None, aggregations = None):
+def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfinder.CSV_DIR), columns=None, aggregations = None):
+
     if columns is None:
         columns = columns_to_use
     if aggregations is not None:
@@ -158,11 +159,11 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_sp
         "random_split": (4 DataFrames) returns x_train, x_test, y_train, y_test (test set = random 20% of observations)
         "standard_split": (4 DataFrames) returns x_train, x_test, y_train, y_test (test set = most recent month of observations)
         None of the above: returns full 1 DataFrame
+    :param use_for: choose between "baseline" or ...
     '''
-    accessor = DataIngestion(data_path=path)
 
     ## Read required data
-    df = get_unprocessed_data(accessor= accessor, columns=columns_to_use)
+    df = get_unprocessed_data(columns=columns_to_use)
 
     if use_for == "baseline":
         df = baseline_feature_engineer(df)
