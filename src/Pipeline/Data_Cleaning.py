@@ -14,6 +14,7 @@ Ordered by:
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 
 """============================== HELPER ================================"""
 
@@ -125,15 +126,35 @@ def baseline_impute_normalize(df: pd.DataFrame):
     df[boolean_cols] = impute(df, target_col=boolean_cols, technique="boolean")
 
     
-    return df 
+    return df
+
+def random_forest_imputer(df: pd.DataFrame, vars:list, y:str, type='classifier'):
+    vars.append(y)
+    df_train = df[vars]
+    df_train = df_train[df_train[y].notna()].copy()
+
+    vars.remove(y)
+    target = df_train[y].values
+    train = df_train[vars].values
+    if type == 'classifier':
+        model = RandomForestClassifier(n_estimators=100)
+        model.fit(train, target)
+        prediction = model.predict(df[vars])
+    else:
+        model = RandomForestRegressor(n_estimators=100)
+        model.fit(train, target)
+        prediction = model.predict(df[vars])
+
+    result = []
+    for i in range(df.shape[0]):
+        if pd.isna(df[y].iloc[i]):
+            result.append(prediction[i])
+        else:
+            result.append(df[y].iloc[i])
+
+    return pd.Series(result)
 
 """============================= WORK IN PROGRESS ==================================="""
-
-## Improved KNN imputation function
-## Idea: make a baseline dataset with low missingness features (geo, lot size,...) (NOT close price to prevent leakage)
-## then fit to sklearn.KNN_Imputer and impute columns in the categories Property Specs from the columns_to_use global var.
-def knn_imputation(): 
-    pass 
 
 """============================ TEMPORARILY UNUSED ==================================="""
 

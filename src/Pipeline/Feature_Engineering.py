@@ -17,6 +17,7 @@ import pandas as pd
 """================================ HELPER ==========================="""
 
 # I think everything here is Eddie's code? Please verify or correct if not.
+# Eddie: Yes it is :)
 
 # Functions working with stacked data are for columns with list values (i.e. Flooring)
 def destack(x):
