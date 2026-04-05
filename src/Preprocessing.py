@@ -91,9 +91,35 @@ def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfin
           AND Longitude IS NOT NULL
           AND Latitude BETWEEN 32 AND 43
           AND Longitude BETWEEN -125 AND -113
+          AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 100000 OFFSET 2)
         """
     )
     return df
+
+def get_eval_data(path=pathfinder.DATABASE_DIR, columns=None):
+    if columns is None:
+        columns = columns_to_use
+    path = path/'crmls.db'
+    if os.path.exists(path):
+        conn = DataIngestion(path)
+        data = conn.query(
+            f"""
+                SELECT {', '.join(columns)}
+                FROM Property
+                WHERE PropertyType = 'Residential'
+                  AND PropertySubType = 'SingleFamilyResidence'
+                  AND ClosePrice > 0
+                  AND LivingArea > 0
+                  AND Latitude IS NOT NULL
+                  AND Longitude IS NOT NULL
+                  AND Latitude BETWEEN 32 AND 43
+                  AND Longitude BETWEEN -125 AND -113
+                  AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 2)
+            """
+        )
+        return get_preprocessed_data(data, output_as='df', use_for="baseline")
+    return None
+
 
 # To be used for trimming test set ClosePrice outliers
 def trimming_quantiles(X, y, quantile=0.05):
@@ -149,10 +175,11 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 # Johnny made changes
 # For baseline testing, call function without arguments
 # To do your own imputation/normalization/feature engineering, change use_for.
-def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_split", use_for: str = "baseline"):
+def get_preprocessed_data(df, output_as: str = "standard_split", use_for: str = "baseline"):
     '''
     Pipeline function.
 
+    :param df: The data to be processed.
     :param path: path to raw csv files. (by default it is ../IDX_data)
     :param output_as: Choose between several options:
         "csv": saves processed csv to path
@@ -163,7 +190,6 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_sp
     '''
 
     ## Read required data
-    df = get_unprocessed_data(columns=columns_to_use)
 
     if use_for == "baseline":
         df = baseline_feature_engineer(df)
