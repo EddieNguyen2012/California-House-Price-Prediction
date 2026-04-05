@@ -57,8 +57,11 @@ def stacked_data_encode(df, feature):
     return mapped, unique_ordered
 
 # Turns month into a feature
-def cyclical_encoding(x):
+def sin_cyclical_encoding(x):
     return np.sin(2 * np.pi * (x.month/12.0))
+
+def cos_cyclical_encoding(x):
+    return np.cos(2 * np.pi * (x.month/12.0))
 
 # Parse PostalCode column into 5-digit integer format - want to encode categorically in future.
 def zipcode_parse(org: str):
@@ -82,7 +85,9 @@ def baseline_feature_engineer(df: pd.DataFrame):
     df = df[df['PostalCode'].astype(str).str.startswith('9')] # dropping zip codes outside of California (~1 in 10000 roughly)
 
     # CloseDate - 
-    df['sin_closed_date'] = df['CloseDate'].apply(cyclical_encoding)
+    df['sin_closed_date'] = df['CloseDate'].apply(sin_cyclical_encoding)
+    df['cos_closed_date'] = df['CloseDate'].apply(cos_cyclical_encoding)
+    df.drop('CloseDate', axis=1, inplace=True)
 
     # DaysOnMarket - Changing negaive values to positive ones (~1 in 10000 entries)
     df['DaysOnMarket'] = np.abs(df['DaysOnMarket']) 

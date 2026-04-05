@@ -173,22 +173,20 @@ def get_preprocessed_data(path=pathfinder.CSV_DIR, output_as: str = "standard_sp
     if output_as == "csv":
         store_data_in_csv(df, path=pathfinder.OUTPUT_DIR)
     if output_as == "random_split":
-        df.drop('CloseDate', axis=1,inplace=True)
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True) 
         return train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
     if output_as == "standard_split":
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True)
-        x_train, x_test, y_train, y_test = train_test_recent_month(df,y) 
-        x_train.drop('CloseDate', axis=1, inplace=True)
-        x_test.drop('CloseDate',axis=1, inplace=True)
+        x_train, x_test, y_train, y_test = train_test_recent_month(df,y)
         return x_train, x_test, y_train, y_test
     else:
         return df
 
 
-
+if __name__ == "__main__":
+    X_train, X_test, y_train, y_test = get_preprocessed_data(output_as='random_split')
 
 
 
