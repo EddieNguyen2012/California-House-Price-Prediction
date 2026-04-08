@@ -16,8 +16,11 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from validation import r2
 import src.path_finder as pathfinder
 import joblib
+
+
 """============================== HELPER ================================"""
 
 def normalize(df: pd.DataFrame, target_col: str | list, technique: str):
@@ -130,11 +133,14 @@ def baseline_impute_normalize(df: pd.DataFrame):
 
     # Use random forest imputer
     df = random_forest_imputer(df, base_features, random_forest_impute_targets, strat='classifier')
+    print(f'Finished imputing {random_forest_impute_targets} using RandomForestImputer')
 
     # Set all NA of HOA fees to 0
     df['AssociationFee'] = impute(df, target_col=['AssociationFee'], technique="constant", fill_value=0)
+    print('Filled missing AssociationFee with zeros.')
     # Median imputation of numeric columns
     df[numeric_cols] = impute(df, target_col=numeric_cols, technique="median")
+    print(f'Finished imputing {numeric_cols} with median imputer.')
 
     # RobustScaler to normalize numeric columns
     # df[numeric_cols] = normalize(df, target_col=numeric_cols, technique="robust")
@@ -142,30 +148,25 @@ def baseline_impute_normalize(df: pd.DataFrame):
     # Turns columns to boolean (also imputes missing/invalid values as False)
     boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
     df[boolean_cols] = impute(df, target_col=boolean_cols, technique="constant", fill_value=False)
-
+    print(f'Filled missing values of {boolean_cols} with False.')
 
     return df
 
 def random_forest_imputer(df: pd.DataFrame, features, y, strat='classifier'):
     df = df.copy()
     for ind_y in y:
-        model = get_imputer_artifacts(ind_y)
+        model = pathfinder.get_imputer_artifacts(ind_y, 'imputer')
         if model is None:
             model = create_imputer_artifacts(df, features, ind_y, strat=strat)
 
         # Predict on the same 5 features from the main dataframe
-        prediction = model.predict(df[features].values)
 
+        prediction = model.predict(df[features].values)
         # Efficiently fill NaNs without a manual loop
         df[ind_y] = df[ind_y].fillna(pd.Series(prediction, index=df.index))
+        print(f'Finished imputation for {ind_y}.')
 
     return df
-
-def get_imputer_artifacts(name):
-    artifact_path = pathfinder.ARTIFACTS_DIR / f'{name}_imputer_model.joblib'
-    if os.path.exists(artifact_path):
-        return joblib.load(artifact_path)
-    return None
 
 def create_imputer_artifacts(df: pd.DataFrame, features, y, strat='classifier'):
     df_train = df[df[y].notna()].copy()
@@ -180,10 +181,12 @@ def create_imputer_artifacts(df: pd.DataFrame, features, y, strat='classifier'):
         model = RandomForestRegressor()
     else:
         raise Exception(f"Unknown imputation technique: {strat}")
-
-    # Train on 5 features
+    print(f'Training imputer model for {y} using RandomForest{strat.capitalize()}. Please wait...')
     model.fit(train, target)
-    joblib.dump(model, filename=pathfinder.ARTIFACTS_DIR / f'{y}_imputer_model.joblib', compress=3)
+    y_pred = model.predict(train)
+    print(f'Finished training imputer model.')
+    print(f"Model's R2: {r2(y_pred, target)}")
+    pathfinder.create_artifacts(model, y, 'imputer')
     return model
 
 """============================= WORK IN PROGRESS ==================================="""

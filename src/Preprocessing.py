@@ -6,6 +6,8 @@ from src.Pipeline.Feature_Engineering import baseline_feature_engineer
 from sklearn.model_selection import train_test_split
 import os
 
+### Init Database
+db_conn = DataIngestion(data_path=pathfinder.CSV_DIR)
 ##### List of usable columns from Jenny's EDA. Change this to get more columns
 columns_to_use = [
 
@@ -71,7 +73,7 @@ columns_to_use = [
 
 # Get data withing restriction.
 # Params: columns = required columns
-def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfinder.CSV_DIR), columns=None, aggregations = None):
+def get_unprocessed_data(columns=None, aggregations = None):
 
     if columns is None:
         columns = columns_to_use
@@ -79,30 +81,27 @@ def get_unprocessed_data(accessor: DataIngestion=DataIngestion(data_path=pathfin
         columns = columns.append(aggregations)
 
     # Optimized query from Johnny's EDA
-    df = accessor.query(
+    df = db_conn.query(
         f"""
-        SELECT {', '.join(columns)}
-        FROM Property
-        WHERE PropertyType = 'Residential'
-          AND PropertySubType = 'SingleFamilyResidence'
-          AND ClosePrice > 0
-          AND LivingArea > 0
-          AND Latitude IS NOT NULL
-          AND Longitude IS NOT NULL
-          AND Latitude BETWEEN 32 AND 43
-          AND Longitude BETWEEN -125 AND -113
-          AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 100000 OFFSET 2)
+            SELECT {', '.join(columns)}
+            FROM Property
+            WHERE PropertyType = 'Residential'
+              AND PropertySubType = 'SingleFamilyResidence'
+              AND ClosePrice > 0
+              AND LivingArea > 0
+              AND Latitude IS NOT NULL
+              AND Longitude IS NOT NULL
+              AND Latitude BETWEEN 32 AND 43
+              AND Longitude BETWEEN -125 AND -113
+              AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 100000 OFFSET 1)
         """
     )
     return df
 
-def get_eval_data(path=pathfinder.DATABASE_DIR, columns=None):
+def get_eval_data(columns=None) -> pd.DataFrame:
     if columns is None:
         columns = columns_to_use
-    path = path/'crmls.db'
-    if os.path.exists(path):
-        conn = DataIngestion(path)
-        data = conn.query(
+        data = db_conn.query(
             f"""
                 SELECT {', '.join(columns)}
                 FROM Property
@@ -114,10 +113,11 @@ def get_eval_data(path=pathfinder.DATABASE_DIR, columns=None):
                   AND Longitude IS NOT NULL
                   AND Latitude BETWEEN 32 AND 43
                   AND Longitude BETWEEN -125 AND -113
-                  AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 2)
+                  AND ReadDate IN (SELECT DISTINCT ReadDate FROM Property ORDER BY ReadDate DESC LIMIT 1)
             """
         )
-        return get_preprocessed_data(data, output_as='df', use_for="baseline")
+        return preprocess_data(data, output_as='df', use_for="baseline")
+    print(f'Database not found')
     return None
 
 
@@ -131,9 +131,10 @@ def trimming_quantiles(X, y, quantile=0.05):
     return X.loc[mask], y.loc[mask]
 
 # Splits into training and test set, where test set is random 20% of observations. Includes trimming.
-def train_test_split_with_trimming(df, y, test_size=0.2, random_state=42):
+def train_test_split_with_trimming(df, y, quantile=0.05, test_size=0.2, random_state=42):
     X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=test_size, random_state=random_state)
-    X_test, y_test = trimming_quantiles(X_test, y_test)
+    X_test, y_test = trimming_quantiles(X_test, y_test, quantile=quantile)
+    print(f'Trimmed {quantile*100}% of data on both sets independently.')
     return X_train, X_test, y_train, y_test
 
 # Johnny: Splits into training and test set, where test set is most recent month of data. Includes trimming.
@@ -175,7 +176,7 @@ def store_data_in_csv(df: pd.DataFrame, path=None):
 # Johnny made changes
 # For baseline testing, call function without arguments
 # To do your own imputation/normalization/feature engineering, change use_for.
-def get_preprocessed_data(df, output_as: str = "standard_split", use_for: str = "baseline"):
+def preprocess_data(df, output_as: str = "standard_split", use_for: str = "baseline"):
     '''
     Pipeline function.
 
@@ -190,25 +191,45 @@ def get_preprocessed_data(df, output_as: str = "standard_split", use_for: str = 
     '''
 
     ## Read required data
-
+    print(f'Processing {df.shape[0]} rows of data.')
     if use_for == "baseline":
         df = baseline_feature_engineer(df)
+        print("Finished feature engineering.")
         df = baseline_impute_normalize(df)
+        print("Finished imputation.")
 
 
     if output_as == "csv":
         store_data_in_csv(df, path=pathfinder.OUTPUT_DIR)
-    if output_as == "random_split":
+        return None
+    elif output_as == "random_split":
         y = df['log_price']
-        df.drop('log_price', axis=1, inplace=True) 
-        return train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
-    if output_as == "standard_split":
+        df.drop('log_price', axis=1, inplace=True)
+        x_train, x_test, y_train, y_test = train_test_split_with_trimming(df=df, y=y, test_size=0.2, random_state=42)
+        print(f'Finished random splitting data into train and test sets!')
+    elif output_as == "standard_split":
         y = df['log_price']
         df.drop('log_price', axis=1, inplace=True)
         x_train, x_test, y_train, y_test = train_test_recent_month(df,y)
-        return x_train, x_test, y_train, y_test
+        print(f'Finished standard splitting data into train and test sets!')
     else:
         return df
+
+    print(
+        f"""
+        Finished processing pipeline. Result shapes: 
+        X_train: {x_train.shape}
+        X_test: {x_test.shape}
+        y_train: {len(y_train)}
+        y_test: {len(y_test)}
+        """
+    )
+    return x_train, x_test, y_train, y_test
+
+
+def get_preprocessed_data(output_as: str = "standard_split", use_for: str = "baseline"):
+    df = get_unprocessed_data()
+    return preprocess_data(df, output_as, use_for)
 
 
 if __name__ == "__main__":
