@@ -10,11 +10,16 @@ Ordered by:
     - Temporarily unused functions
 
 """
+import os
 
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from validation import r2
+import src.path_finder as pathfinder
+import joblib
+
 
 """============================== HELPER ================================"""
 
@@ -42,7 +47,7 @@ def normalize(df: pd.DataFrame, target_col: str | list, technique: str):
         raise ValueError("Unknown normalization type")
     return normalizer.fit_transform(df[target_col])
 
-def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neighbors: int = 5, knn_weights: str = 'distance'):
+def impute(df: pd.DataFrame, target_col: list, technique: str, fill_value=0):
     '''
     Building on Jenny's and Huiyu's work, Johnny's general-purpose function for imputing column(s)
     Can choose between different techniques and add more if desired.
@@ -64,11 +69,12 @@ def impute(df: pd.DataFrame, target_col: str | list, technique: str, knn_n_neigh
 
     simple_metrics = ["median","mean","most_frequent","constant"]
     if technique in simple_metrics:
-        imputer = SimpleImputer(strategy=technique)
+        if technique == "constant":
+            imputer = SimpleImputer(strategy=technique, fill_value=fill_value)
+        else:
+            imputer = SimpleImputer(strategy=technique)
     elif technique == "boolean":
         return bool_encode(df, target_col)
-    elif technique == "knn":
-        imputer = KNNImputer(n_neighbors=knn_n_neighbors, weights=knn_weights)
     else:
         return None
     
@@ -112,47 +118,76 @@ def baseline_impute_normalize(df: pd.DataFrame):
     Categoricals are imputed by 'most_frequent'
     """
     df = df.copy()
-
+    base_features = [
+        'Latitude',
+        'Longitude',
+        'BedroomsTotal',
+        'LivingArea',
+        'sin_closed_date',
+        'cos_closed_date',
+        'DaysOnMarket'
+    ]
+    random_forest_impute_targets = ['YearBuilt', 'BedroomsTotal', 'BathroomsTotalInteger']
     numeric_cols = df.select_dtypes(include='number').columns
+    numeric_cols = list(set(numeric_cols) - set(random_forest_impute_targets) - {'AssociationFee'})
 
+    # Use random forest imputer
+    df = random_forest_imputer(df, base_features, random_forest_impute_targets, strat='classifier')
+    print(f'Finished imputing {random_forest_impute_targets} using RandomForestImputer')
+
+    # Set all NA of HOA fees to 0
+    df['AssociationFee'] = impute(df, target_col=['AssociationFee'], technique="constant", fill_value=0)
+    print('Filled missing AssociationFee with zeros.')
     # Median imputation of numeric columns
     df[numeric_cols] = impute(df, target_col=numeric_cols, technique="median")
+    print(f'Finished imputing {numeric_cols} with median imputer.')
 
     # RobustScaler to normalize numeric columns
-    df[numeric_cols] = normalize(df, target_col=numeric_cols, technique="robust")
+    # df[numeric_cols] = normalize(df, target_col=numeric_cols, technique="robust")
 
     # Turns columns to boolean (also imputes missing/invalid values as False)
     boolean_cols = ['AttachedGarageYN', 'FireplaceYN', 'NewConstructionYN', 'PoolPrivateYN', 'ViewYN']
-    df[boolean_cols] = impute(df, target_col=boolean_cols, technique="boolean")
+    df[boolean_cols] = impute(df, target_col=boolean_cols, technique="constant", fill_value=False)
+    print(f'Filled missing values of {boolean_cols} with False.')
 
-    
     return df
 
-def random_forest_imputer(df: pd.DataFrame, vars:list, y:str, type='classifier'):
-    vars.append(y)
-    df_train = df[vars]
-    df_train = df_train[df_train[y].notna()].copy()
+def random_forest_imputer(df: pd.DataFrame, features, y, strat='classifier'):
+    df = df.copy()
+    for ind_y in y:
+        model = pathfinder.get_imputer_artifacts(ind_y, 'imputer')
+        if model is None:
+            model = create_imputer_artifacts(df, features, ind_y, strat=strat)
 
-    vars.remove(y)
+        # Predict on the same 5 features from the main dataframe
+
+        prediction = model.predict(df[features].values)
+        # Efficiently fill NaNs without a manual loop
+        df[ind_y] = df[ind_y].fillna(pd.Series(prediction, index=df.index))
+        print(f'Finished imputation for {ind_y}.')
+
+    return df
+
+def create_imputer_artifacts(df: pd.DataFrame, features, y, strat='classifier'):
+    df_train = df[df[y].notna()].copy()
+
+    # Extract target and training data
     target = df_train[y].values
-    train = df_train[vars].values
-    if type == 'classifier':
-        model = RandomForestClassifier(n_estimators=100)
-        model.fit(train, target)
-        prediction = model.predict(df[vars])
+    train = df_train[features].values  # USES ORIGINAL 5 FEATURES
+
+    if strat == 'classifier':
+        model = RandomForestClassifier()
+    elif strat == 'regressor':
+        model = RandomForestRegressor()
     else:
-        model = RandomForestRegressor(n_estimators=100)
-        model.fit(train, target)
-        prediction = model.predict(df[vars])
-
-    result = []
-    for i in range(df.shape[0]):
-        if pd.isna(df[y].iloc[i]):
-            result.append(prediction[i])
-        else:
-            result.append(df[y].iloc[i])
-
-    return pd.Series(result)
+        raise Exception(f"Unknown imputation technique: {strat}")
+    print(f'Training imputer model for {y} using RandomForest{strat.capitalize()}. Please wait...')
+    model.fit(train, target)
+    y_pred = model.predict(train)
+    print(f'Finished training imputer model.')
+    print(f"Model's R2: {r2(y_pred, target)}")
+    pathfinder.create_artifacts(model, y, 'imputer')
+    return model
 
 """============================= WORK IN PROGRESS ==================================="""
 
@@ -214,3 +249,5 @@ def build_sklearn_preprocessor(
         verbose_feature_names_out=False,
     )
     return preprocessor
+
+

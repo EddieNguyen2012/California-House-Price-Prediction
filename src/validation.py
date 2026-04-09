@@ -1,8 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from sklearn.metrics import r2_score, make_scorer
-from sklearn.model_selection import cross_validate
+
 
 def mdape(y_pred, y_test):
     """
@@ -41,27 +39,33 @@ def real_world_mdape(y_pred_log, y_test_log):
     error = np.abs(y_test_actual - y_pred_actual)
     return np.median(error / y_test_actual) * 100
 
+def real_world_r2(y_pred_log, y_test_log):
+    y_pred_actual = np.exp(y_pred_log)
+    y_test_actual = np.exp(y_test_log)
+    return r2(y_pred_actual, y_test_actual)
+
 def r2(y_pred, y_test):
     sse = sum((y_test - y_pred) ** 2)
     sst = sum((y_test - np.mean(y_test)) ** 2)
     return 1 - (sse / sst)
 
 def get_eval_plots(y_pred, y_test) -> plt.Figure:
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(20, 10))
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(15, 8))
 
     axs[0].scatter(x=y_pred, y=y_test)
-    axs[0].set_title("QQ Plot (y_pred vs y_test)")
-    axs[0].set_ylabel("y_pred")
-    axs[0].set_xlabel("y_test")
+    axs[0].set_title("Prediction vs Actual")
+    axs[0].set_ylabel("Prediction")
+    axs[0].set_xlabel("Actual")
 
     axs[1].scatter(x=y_pred, y=y_test - y_pred)
-    axs[1].set_title("Residual Plot (y_pred vs residual)")
-    axs[1].set_ylabel("y_pred")
+    axs[1].set_title("Residual Plot (Prediction vs Residual)")
+    axs[1].set_ylabel("Prediction")
     axs[1].set_xlabel("residual")
 
     return fig
 
 def evaluate(y_pred, y_test):
-    print(f'R2: {r2(y_pred, y_test):.4f}')
+    print(f'R2: {real_world_r2(y_pred, y_test):.4f}')
+    print(f'R2 (log): {r2(y_pred, y_test):.4f}')
     print(f'MdAPE (log-scale): {mdape(y_pred, y_test):.2f}%')
     print(f'MdAPE (dollar-scale): {real_world_mdape(y_pred, y_test):.2f}%')
