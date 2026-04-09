@@ -87,7 +87,7 @@ def baseline_feature_engineer(df: pd.DataFrame):
     # CloseDate - 
     df['sin_closed_date'] = df['CloseDate'].apply(sin_cyclical_encoding)
     df['cos_closed_date'] = df['CloseDate'].apply(cos_cyclical_encoding)
-    df.drop('CloseDate', axis=1, inplace=True)
+    # df.drop('CloseDate', axis=1, inplace=True)
     print('Finished cyclical encoding CloseDate.')
 
     # DaysOnMarket - Changing negaive values to positive ones (~1 in 10000 entries)
