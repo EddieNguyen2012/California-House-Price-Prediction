@@ -26,13 +26,14 @@ columns_to_use = [
 # --- Property Specs ---
 'AttachedGarageYN', 'BathroomsTotalInteger', 'BedroomsTotal', 'FireplaceYN',
 'Flooring', 'GarageSpaces', 'Levels', 'LivingArea', 'MainLevelBedrooms',
-'NewConstructionYN', 'ParkingTotal', 'PoolPrivateYN', 'Stories', 'ViewYN', 'YearBuilt',
+'NewConstructionYN', 'ParkingTotal', 'PoolPrivateYN', 'Stories', 'ViewYN', 'YearBuilt', 'HighSchoolDistrict',
 
 # --- Lot Information ---
-'LotSizeAcres', 'LotSizeArea', 'LotSizeSquareFeet',
+# 'LotSizeAcres',  'LotSizeSquareFeet',
+'LotSizeArea',
 
 # --- Transaction & Status ---
-'AssociationFee', 'CloseDate', 'ClosePrice', 'DaysOnMarket',
+'AssociationFee', 'CloseDate', 'ClosePrice', 'DaysOnMarket', 'ReadDate'
     # 'MlsStatus',
 ]
 #######
