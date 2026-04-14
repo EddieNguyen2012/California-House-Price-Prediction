@@ -2,3 +2,5 @@
 /IDX_data/
 /Data/
 /Output/
+__pycache__/
+*.pyc
